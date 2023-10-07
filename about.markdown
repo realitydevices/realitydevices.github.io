@@ -4,9 +4,9 @@ title: About
 permalink: /about/
 ---
 
-### Reality Construction Devices - Your Trusted Data Expert in Brisbane
+### Reality Devices - Your Trusted Data Expert in Brisbane
 
-Welcome to Reality Construction Devices, where data expertise meets innovation! I'm KB, a Brisbane-based data expert with over 15 years of hands-on experience across diverse industries. With a passion for solving complex data challenges and a track record of delivering results, I'm here to guide you through the dynamic world of data.
+Welcome to Reality Devices, where data expertise meets innovation! I'm KB, a Brisbane-based data expert with over 15 years of hands-on experience across diverse industries. With a passion for solving complex data challenges and a track record of delivering results, I'm here to guide you through the dynamic world of data.
 
 ### My Data Journey
 
@@ -16,7 +16,7 @@ My journey in the data landscape has been nothing short of exhilarating. Having 
 
 Whether you're a small business seeking guidance or an enterprise in need of a comprehensive data strategy, I've got you covered. My mission is simple: to empower businesses like yours with tailored solutions that drive success. I specialize in quick-turnaround ideation, ensuring that you receive the answers you need precisely when you need them.
 
-### Why Choose Reality Construction Devices
+### Why Choose Reality Devices
 
     Proven Expertise: With two decades of experience, I bring a wealth of knowledge to the table. You can trust that your data challenges are in capable hands.
 
@@ -28,7 +28,7 @@ Whether you're a small business seeking guidance or an enterprise in need of a c
 
 ### Let's Transform Your Data
 
-Whether you're looking for data assessments, strategy development, solution design, or implementation support, Reality Construction Devices is your trusted partner. I thrive on turning data into actionable insights that fuel your success.
+Whether you're looking for data assessments, strategy development, solution design, or implementation support, Reality Devices is your trusted partner. I thrive on turning data into actionable insights that fuel your success.
 
 Let's embark on this data journey together! Contact me today, and let's explore the endless possibilities that data can unlock for your business.
 
