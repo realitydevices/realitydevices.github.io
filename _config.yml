@@ -22,7 +22,7 @@ title: Reality Devices
 email: info@realitydevices.au
 description: >- # this means to ignore newlines until "baseurl:"
   Discover limitless possibilities with Reality Devices.
-  Expert data consultanting, specializing in rapid ideation and transformative solutions.
+  Expert data consulting, specializing in rapid ideation and transformative solutions.
   Elevate your business with us, where data shapes success.
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
@@ -33,6 +33,10 @@ github_username:  jekyll
 theme: minima
 plugins:
   - jekyll-feed
+
+header_pages:
+  - about.md
+  - contact.md
 
 # Exclude from processing.
 # The following items will not be processed, by default.
