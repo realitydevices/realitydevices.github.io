@@ -31,5 +31,5 @@ Whether you're a small business seeking guidance or an enterprise in need of a c
 
 Whether you're looking for data assessments, strategy development, solution design, or implementation support, Reality Devices is your trusted partner. I thrive on turning data into actionable insights that fuel your success.
 
-Let's embark on this data journey together! Contact me today, and let's explore the endless possibilities that data can unlock for your business.
+Let's embark on this data journey together! [Contact me](#contact) today, and let's explore the endless possibilities that data can unlock for your business.
 
