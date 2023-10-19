@@ -95,7 +95,7 @@ chulapa-skin:
 
 
 # Build settings
-theme: chulapa-jekyll
+remote_theme: chulapa-jekyll
 plugins:
   - jekyll-feed
 
