@@ -1,19 +1,10 @@
 ---
-layout: page
 title: Contact us
 permalink: /contact/
 ---
 
-We're working on it.
-<!-- <form accept-charset="UTF-8" action="{your-unique-url}" method="POST">
-  <label for="name">Name</label>
-  <input type="text" id="name" name="name" required>
+### Get in touch
 
-  <label for="email">Email</label>
-  <input type="email" id="email" name="email" required>
+Please send us a message so we can find a time to discuss your needs in detail.
 
-  <label for="message">Message</label>
-  <textarea name="message"></textarea>
-
-  <button type="submit">Send message</button>
-</form> -->
+{% include contact_form.html %}

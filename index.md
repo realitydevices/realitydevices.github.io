@@ -8,7 +8,7 @@ hide: true
 
 # Welcome to Reality Devices
 
-## Shaping Your Business Reality with Data Expertise
+## Shaping Business Reality with Data Expertise
 
 At Reality Devices, we're here to transform your business dreams into reality. Our team of seasoned data experts, with over 20 years of experience across industries, is ready to empower you with the tools, strategies, and insights you need to achieve your goals.
 
