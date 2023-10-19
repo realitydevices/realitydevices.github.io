@@ -10,7 +10,7 @@ hide: true
 
 ## Shaping Your Business Reality with Data Expertise
 
-At Reality Devices, we're here to transform your business dreams into reality. Our team of seasoned data experts, with over 15 years of experience across industries, is ready to empower you with the tools, strategies, and insights you need to achieve your goals.
+At Reality Devices, we're here to transform your business dreams into reality. Our team of seasoned data experts, with over 20 years of experience across industries, is ready to empower you with the tools, strategies, and insights you need to achieve your goals.
 
 ### Why Choose Reality Devices?
 
@@ -20,8 +20,6 @@ At Reality Devices, we're here to transform your business dreams into reality. O
 
 - **Proven Expertise:** With a track record of success in government, mining, marketing, and technology, we bring a wealth of knowledge to the table.
 
-- **Fine-Tuned Marketing:** We know how to market and promote data consultancy services, and we can help you gain interesting and well-paying clients.
-
 [**Ready to Shape Your Reality? Let's Get Started!**](#contact)
 
 ### Our Services
@@ -30,5 +28,5 @@ Our Services Include:
 
 - Data Reviews and Assessments
 - Data Strategy Development
-- Solution Design and Implementation
-- Marketing and Promotional Strategies for Data Consultancies
+- Solution Architecture & Design
+- Project Execution & Technical Implemtation
