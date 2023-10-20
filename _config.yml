@@ -61,6 +61,8 @@ navbar:
     url     :  / # default["url/baseurl"]
     img     :  # An small image, try 30x30px
   nav:
+  - title   : Blog # Label
+    url     : /blog/ # url	
   - title   : About # Label
     url     : /about # url
   - title   : Contact
@@ -93,15 +95,55 @@ chulapa-skin:
     light: "#eaf4f5ff"
 
 
+# D. Jekyll Defaults and collections: see https://jekyllrb.com/
+
+# Blog pagination: on this site /blog/index.html. https://jekyllrb.com/docs/pagination/
+paginate: 4
+paginate_path: "/blog/page:num/"
+paginator_maxnum: 3  #default[3] Custom: max of number to be displayed on the paginator
+
+# Defaults https://jekyllrb.com/docs/configuration/front-matter-defaults/
+defaults:
+  -
+    scope:
+      path: ""
+    values:
+      layout: "default"
+      header_type: "base"
+      include_on_search   : false
+      cloudtag_url        : /tags #This is where the link on tags would redirect
+      cloudcategory_url   : /categories #This is where the link on categories would redirect
+  -
+    scope:
+      path: ""
+      type: "posts"
+    values:
+      header_type       : "post"
+      include_on_search : true
+      include_on_feed   : true
+      show_date         : true
+      show_related      : true
+      show_bottomnavs   : true
+      show_sociallinks  : true
+      show_comments     : true
+      show_tags         : true
+      show_categories   : true
+      show_author       : true
+      show_breadcrumb   : true
+      breadcrumb_list   :
+        - label: Blog
+          url: /blog/
+
+
 
 # Build settings
 remote_theme: dieghernan/chulapa
 plugins:
   - jekyll-feed
   - jekyll-include-cache
+  - jekyll-github-metadata
+  - jekyll-paginate
+  - jekyll-sitemap
 
-header_pages:
-  - about.md
-  - contact.md
 
 repository: realitydevices/realitydevices.github.io

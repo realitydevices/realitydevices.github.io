@@ -1,12 +1,8 @@
 ---
-# To modify the layout, see https://jekyllrb.com/docs/themes/#overriding-theme-defaults
-
-title: Index
+title: Welcome to Reality Devices
 layout: default
 hide: true
 ---
-
-# Welcome to Reality Devices
 
 ## Shaping Business Reality with Data Expertise
 
@@ -14,11 +10,11 @@ At Reality Devices, we're here to transform your business dreams into reality. O
 
 ### Why Choose Reality Devices?
 
-- **Rapid Ramp-Up Ideation:** We specialize in quick turnaround, helping you find innovative solutions to your data and analysis problems in record time.
+- **Rapid Ideation:** We specialize in quick turnaround projects, helping you find innovative solutions to your data and analysis problems in record time.
 
-- **Customized Solutions:** No two businesses are alike. That's why we tailor our services to meet your unique needs, whether you're a small business seeking guidance or an enterprise in need of strategy and implementation support.
+- **Customized Solutions:** No two businesses are alike. That's why we tailor our services to meet your unique needs, whether you're a small business seeking guidance or an enterprise in need of strategic and architectural support.
 
-- **Proven Expertise:** With a track record of success in government, mining, marketing, and technology, we bring a wealth of knowledge to the table.
+- **Proven Expertise:** With a track record of success in marketing, government, mining, and technology, we bring a wealth of knowledge to the table.
 
 [**Ready to Shape Your Reality? Let's Get Started!**](#contact)
 
