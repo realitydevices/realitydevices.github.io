@@ -16,7 +16,7 @@ At Reality Devices, we're here to transform your business dreams into reality. O
 
 - **Proven Expertise:** With a track record of success in marketing, government, mining, and technology, we bring a wealth of knowledge to the table.
 
-[**Ready to Shape Your Reality? Let's Get Started!**](#contact)
+[**Ready to Shape Your Reality? Let's Get Started!**](contact)
 
 ### Our Services
 
@@ -25,4 +25,4 @@ Our Services Include:
 - Data Reviews and Assessments
 - Data Strategy Development
 - Solution Architecture & Design
-- Project Execution & Technical Implemtation
+- Project Execution & Technical Implementation
