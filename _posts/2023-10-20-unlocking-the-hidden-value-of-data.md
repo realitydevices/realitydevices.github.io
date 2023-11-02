@@ -38,4 +38,4 @@ In conclusion, the hidden value of data for businesses is immense. It's not just
 
 As a Brisbane-based data expert with over 20 years of experience, I specialize in helping businesses like yours unlock the potential of their data. Whether you need assistance with data analysis, strategy development, or implementing data-driven solutions, my consulting services are designed to help you make the most of your data and grow your business.
 
-Ready to take your business to the next level through the power of data? [Contact us](#contact) today, and let's embark on this exciting journey together. Your untapped opportunities are waiting to be discovered.
+Ready to take your business to the next level through the power of data? [Contact us](contact) today, and let's embark on this exciting journey together. Your untapped opportunities are waiting to be discovered.
