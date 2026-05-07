@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RCD Orbit — Prototype</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Lexend+Peta:wght@400;700&display=swap');
+
+    /* Per-surface palette, taken straight from rcd.svg. */
+    :root {
+      --rcd-orange: #FF8A30;   /* r — outer wedge */
+      --rcd-cyan:   #00D4F0;   /* c — middle cube */
+      --rcd-light:  #EAF4F5;   /* d — inner faces */
+      --rcd-dim:    rgba(234, 244, 245, 0.10);
+    }
+
+    html, body { margin: 0; height: 100%; background: #07090c; overflow: hidden; }
+    body {
+      font-family: 'Lexend Peta', system-ui, sans-serif;
+      color: var(--rcd-light);
+      -webkit-font-smoothing: antialiased;
+    }
+    canvas { display: block; }
+
+    #scene-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+    }
+
+    /* Brand stack — three words. The active one (driven by camera yaw) lights up
+       in its surface colour; the others sit dim. */
+    .brand {
+      position: fixed;
+      top: 50%;
+      left: 6vw;
+      transform: translateY(-50%);
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55em;
+      font-size: clamp(18px, 2.4vw, 32px);
+      line-height: 1;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      user-select: none;
+    }
+    .brand .word {
+      color: var(--rcd-dim);
+      transition:
+        color 500ms ease,
+        text-shadow 500ms ease,
+        letter-spacing 500ms ease,
+        transform 500ms ease;
+      transform: translateX(-4px);
+    }
+    .brand .word.is-active {
+      transform: translateX(0);
+      letter-spacing: 0.14em;
+    }
+    .brand .word[data-word="reality"].is-active {
+      color: var(--rcd-orange);
+      text-shadow: 0 0 24px rgba(255, 138, 48, 0.55), 0 0 48px rgba(255, 138, 48, 0.18);
+    }
+    .brand .word[data-word="construction"].is-active {
+      color: var(--rcd-cyan);
+      text-shadow: 0 0 24px rgba(0, 212, 240, 0.55), 0 0 48px rgba(0, 212, 240, 0.18);
+    }
+    .brand .word[data-word="devices"].is-active {
+      color: var(--rcd-light);
+      text-shadow: 0 0 24px rgba(234, 244, 245, 0.55), 0 0 48px rgba(234, 244, 245, 0.18);
+    }
+
+    .footer {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
+      font-family: 'Lexend Peta', system-ui, sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      color: var(--rcd-cyan);
+      opacity: 0.75;
+      pointer-events: auto;
+    }
+    .footer a { color: inherit; text-decoration: none; }
+    .footer a:hover { opacity: 1; }
+
+    /* Solo / debug picker — radio list to isolate one polygon at a time. */
+    .solo-panel {
+      position: fixed;
+      top: 22px;
+      right: 22px;
+      z-index: 3;
+      background: rgba(7, 9, 12, 0.72);
+      border: 1px solid rgba(234, 244, 245, 0.1);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: rgba(234, 244, 245, 0.85);
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      user-select: none;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .solo-panel .title {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      opacity: 0.5;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(234, 244, 245, 0.08);
+    }
+    .solo-panel label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 1px 0;
+    }
+    .solo-panel label:hover { color: #fff; }
+    .solo-panel input[type="radio"] {
+      margin: 0;
+      accent-color: #00D4F0;
+    }
+    .solo-panel .swatch {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      display: inline-block;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .solo-panel .meta {
+      opacity: 0.45;
+      font-size: 10px;
+      margin-left: auto;
+    }
+
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="scene-canvas"></canvas>
+
+  <div class="brand" aria-hidden="true">
+    <span class="word is-active" data-word="reality">Reality</span>
+    <span class="word" data-word="construction">Construction</span>
+    <span class="word" data-word="devices">Devices</span>
+  </div>
+
+  <div class="footer">
+    <a href="mailto:info@realitydevices.au">info@realitydevices.au</a>
+  </div>
+
+  <aside class="solo-panel" aria-label="Polygon picker">
+    <div class="title">isolate</div>
+    <label><input type="radio" name="solo" value="all" checked><span class="swatch" style="background:transparent;border-style:dashed"></span><span>all</span></label>
+  </aside>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+
+    // --- Tunables (see SPEC.md "Tuning knobs") ---
+    const cameraRadius = 70;
+    const yawRange = 0.6;     // ~ ±108° (multiplied by Math.PI / yawRange-ish below)
+    const pitchRange = 0.25;  // ~ ±45°
+    const cameraLag = 0.05;
+    const frustumSize = 60;   // Orthographic camera "zoom". Smaller = closer.
+    const monolithCount = 12;
+    const fogDensity = 0.004;
+    const DEBUG = false;
+
+    // --- Component-based plane assignment ---
+    // Each <path> in rcd.svg carries an id (p0..p14). We look up extrusion
+    // depth by id, not by fill colour — fills repeat across paths so colour
+    // is not a unique key. Coplanar groups are explicit: paths sharing a
+    // `plane` value get the same depth, period.
+    //
+    // Units: SVG pre-scale. SVG bbox ≈ 1145 tall, scaled to a 20-unit-tall
+    // logo, so effective world-depth ≈ depth / ~57.
+    //
+    // Planes (back to front, smaller depth = further from camera):
+    //   cube — the three iso-cube parallelograms (sits on the back plane)
+    //   trim — non-letter trim bits (orange bottom/right, blue right)
+    //   r    — the "r" letter (orange wedge proper)
+    //   c    — the "c" letter (cyan)
+    //   d    — the "d" letter (inner light face) — sticks out furthest
+    const planeDepth = {
+      cube: 150,
+      trim: 250,
+      r:    400,
+      c:    600,
+      d:    1000,
+    };
+    // null = render-suppressed (mesh not built; not shown in solo panel either).
+    const componentPlane = {
+      p0:  'r',      // r — orange letter
+      p1:  'trim',   // orange bottom
+      // p2 / p3 / p5 / p6 are white background wedges, filtered by colour
+      p4:  'trim',   // orange right
+      p7:  'd',      // d — inner light letter
+      p8:  'c',      // c — cyan letter
+      p9:  'trim',   // blue right
+      p10: null,     // hidden
+      p11: 'cube',   // cube parallelogram
+      p12: 'cube',   // cube parallelogram
+      p13: 'cube',   // cube parallelogram (the inner orange — coplanar with the cyan cube faces)
+      p14: null,     // hidden
+    };
+    function lookupLayer(id) {
+      const plane = componentPlane[id];
+      const depth = plane ? planeDepth[plane] : null;
+      return { depth, plane };
+    }
+
+    // Per-id mesh registry — populated as the SVG loads. Lets the solo-radio
+    // panel toggle a polygon's visibility without rebuilding geometry.
+    const meshesById = new Map();
+
+    // --- Scene / renderer / camera ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x07090c);
+    scene.fog = new THREE.FogExp2(0x07090c, fogDensity);
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas: document.getElementById('scene-canvas'),
+      antialias: true,
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+
+    // Orthographic camera = zero perspective distortion. The orbit still reveals
+    // the sides of the logo because the camera moves around it; what goes away is
+    // the fisheye/foreshortening you get from a wide-FOV perspective lens.
+    const aspect0 = window.innerWidth / window.innerHeight;
+    const camera = new THREE.OrthographicCamera(
+      -frustumSize * aspect0 / 2,
+       frustumSize * aspect0 / 2,
+       frustumSize / 2,
+      -frustumSize / 2,
+       0.1, 2000,
+    );
+
+    // --- Lights: warm orange left, cool cyan right ---
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6)); // was 0.18 — brighter for debug
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    keyLight.position.set(40, 60, 40);
+    scene.add(keyLight);
+
+    const warmLight = new THREE.PointLight(0xff7a1a, 2.5, 300, 2.0);
+    warmLight.position.set(-50, 10, 30);
+    scene.add(warmLight);
+
+    const coolLight = new THREE.PointLight(0x00d4f0, 2.0, 300, 2.0);
+    coolLight.position.set(50, -10, 30);
+    scene.add(coolLight);
+
+    // --- DEBUG: known-good objects so we can confirm the render pipeline ---
+    if (DEBUG) {
+      const debugCube = new THREE.Mesh(
+        new THREE.BoxGeometry(10, 10, 10),
+        new THREE.MeshStandardMaterial({ color: 0xff0066, emissive: 0x440022 })
+      );
+      debugCube.position.set(0, 0, 0);
+      scene.add(debugCube);
+
+      const debugSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(3, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+      );
+      debugSphere.position.set(20, 0, 0);
+      scene.add(debugSphere);
+    }
+
+    // --- Logo group (filled by SVGLoader) ---
+    const logoGroup = new THREE.Group();
+    scene.add(logoGroup);
+
+    const loader = new SVGLoader();
+    loader.load('rcd.svg', (data) => {
+      console.log('[proto] SVG loaded. paths:', data.paths.length);
+      const tempGroup = new THREE.Group();
+      const box = new THREE.Box3();
+      let kept = 0, skipped = 0;
+
+      data.paths.forEach((path, pi) => {
+        try {
+          const id = path.userData?.node?.id || `auto${pi}`;
+          const fill = path.userData?.style?.fill;
+          if (!fill || fill === 'none') { skipped++; return; }
+
+          const color = new THREE.Color().setStyle(fill);
+          // Filter pure-white background wedges; keep #EAF4F5 (inner faces).
+          if (color.r > 0.99 && color.g > 0.99 && color.b > 0.99) { skipped++; return; }
+
+          // componentPlane null/undefined = explicit render-suppression (e.g. p10, p14).
+          const { depth, plane } = lookupLayer(id);
+          if (!plane) { skipped++; return; }
+          kept++;
+
+          const material = new THREE.MeshPhysicalMaterial({
+            color,
+            metalness: 0.3,
+            roughness: 0.35,
+            clearcoat: 0.6,
+            clearcoatRoughness: 0.25,
+            side: THREE.DoubleSide,
+          });
+
+          const shapes = SVGLoader.createShapes(path);
+          console.log(`[proto] ${id} fill=${fill} plane=${plane} depth=${depth} shapes=${shapes.length}`);
+          const meshesForId = [];
+          shapes.forEach((shape, si) => {
+            try {
+              const geom = new THREE.ExtrudeGeometry(shape, {
+                depth,
+                bevelEnabled: true,
+                bevelThickness: 0.4,
+                bevelSize: 0.4,
+                bevelSegments: 2,
+                curveSegments: 12,
+              });
+              const mesh = new THREE.Mesh(geom, material);
+              tempGroup.add(mesh);
+              meshesForId.push(mesh);
+            } catch (e) {
+              console.error(`[proto] extrude failed path ${pi} shape ${si}:`, e);
+            }
+          });
+          meshesById.set(id, { meshes: meshesForId, fill, plane });
+        } catch (e) {
+          console.error(`[proto] path ${pi} threw:`, e);
+        }
+      });
+
+      console.log('[proto] paths kept:', kept, 'skipped:', skipped, 'meshes:', tempGroup.children.length);
+
+      // Measure raw bbox to compute uniform scale.
+      box.setFromObject(tempGroup);
+      const size = box.getSize(new THREE.Vector3());
+      console.log('[proto] svg bbox size:', size.x, size.y, size.z);
+
+      // Apply scale first (Y-flip baked in), then re-measure & center.
+      // Shrunk 50% from the original 40 to leave room for the brand stack on the left.
+      const targetHeight = 20;
+      const s = size.y > 0 ? targetHeight / size.y : 1;
+      tempGroup.scale.set(s, -s, s);
+
+      const scaledBox = new THREE.Box3().setFromObject(tempGroup);
+      const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+      tempGroup.position.sub(scaledCenter);
+
+      logoGroup.add(tempGroup);
+      populateSoloPanel();
+    }, undefined, (err) => {
+      console.error('[proto] SVG load error:', err);
+    });
+
+    // --- Solo radio panel ---
+    // Sorted by id (p0, p1, ... p14). Each radio shows a colour swatch and the
+    // resolved plane name, so you can correlate id ↔ visual polygon ↔ plane
+    // group at a glance. Selecting a radio toggles mesh visibility — geometry
+    // stays in scene, no rebuild.
+    const soloPanel = document.querySelector('.solo-panel');
+    function populateSoloPanel() {
+      const ids = Array.from(meshesById.keys()).sort((a, b) => {
+        const na = parseInt(a.replace(/\D/g, ''), 10);
+        const nb = parseInt(b.replace(/\D/g, ''), 10);
+        return na - nb;
+      });
+      for (const id of ids) {
+        const { fill, plane } = meshesById.get(id);
+        const label = document.createElement('label');
+        label.innerHTML =
+          `<input type="radio" name="solo" value="${id}">` +
+          `<span class="swatch" style="background:${fill}"></span>` +
+          `<span>${id}</span>` +
+          `<span class="meta">${plane ?? '—'}</span>`;
+        soloPanel.appendChild(label);
+      }
+      soloPanel.addEventListener('change', (e) => {
+        if (e.target?.name === 'solo') applySolo(e.target.value);
+      });
+    }
+    function applySolo(val) {
+      meshesById.forEach(({ meshes }, id) => {
+        const visible = val === 'all' || val === id;
+        meshes.forEach((m) => { m.visible = visible; });
+      });
+    }
+
+    // --- Background: 3 particle shells ---
+    function makeParticleShell(count, radius, color, size) {
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        // Random point on sphere
+        const u = Math.random();
+        const v = Math.random();
+        const theta = 2 * Math.PI * u;
+        const phi = Math.acos(2 * v - 1);
+        const r = radius * (0.85 + Math.random() * 0.3);
+        positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = r * Math.cos(phi);
+      }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({
+        color, size, transparent: true, opacity: 0.85,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        sizeAttenuation: true,
+      });
+      return new THREE.Points(geom, mat);
+    }
+    scene.add(makeParticleShell(400, 120, 0xffaa66, 2.0));
+    scene.add(makeParticleShell(700, 250, 0xffffff, 1.6));
+    scene.add(makeParticleShell(1200, 500, 0x66d4f0, 1.4));
+
+    // --- Monoliths: low-poly platonic solids drifting behind the logo ---
+    const monoliths = [];
+    const monolithGeoms = [
+      () => new THREE.IcosahedronGeometry(6 + Math.random() * 4, 0),
+      () => new THREE.OctahedronGeometry(6 + Math.random() * 4, 0),
+      () => new THREE.TetrahedronGeometry(6 + Math.random() * 4, 0),
+    ];
+    for (let i = 0; i < monolithCount; i++) {
+      const geom = monolithGeoms[i % monolithGeoms.length]();
+      const isWarm = i % 2 === 0;
+      const wireframe = i % 3 === 0;
+      const mat = new THREE.MeshStandardMaterial({
+        color: isWarm ? 0xff7a1a : 0x00d4f0,
+        emissive: isWarm ? 0x331100 : 0x003844,
+        roughness: 0.6,
+        metalness: 0.2,
+        transparent: true,
+        opacity: 0.18,
+        wireframe,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      const angle = (i / monolithCount) * Math.PI * 2 + Math.random() * 0.5;
+      const r = 60 + Math.random() * 80;
+      // Distributed all around the logo. With z ∈ [-r-20, +r-20], roughly half
+      // of the monoliths sit in front of the logo and half behind — that's
+      // intentional: foreground monoliths are part of the depth story.
+      mesh.position.set(
+        Math.cos(angle) * r,
+        (Math.random() - 0.5) * 60,
+        Math.sin(angle) * r - 20,
+      );
+      mesh.userData = {
+        bobSpeed: 0.3 + Math.random() * 0.4,
+        bobAmp: 1 + Math.random() * 2,
+        baseY: mesh.position.y,
+        rotSpeed: (Math.random() - 0.5) * 0.005,
+      };
+      scene.add(mesh);
+      monoliths.push(mesh);
+    }
+
+    // --- Camera orbit (mouse-driven, lerped) ---
+    const target = { yaw: 0, pitch: 0 };
+    const current = { yaw: 0, pitch: 0 };
+
+    // --- Distance-from-centre word highlight ---
+    // R = 10% of viewport height. Concentric rings select the word:
+    //   d  <  R  → reality       (neutral, page-load default)
+    //   R  ≤ d < 2R → construction
+    //   2R ≤ d < 3R → devices
+    //   d  ≥ 3R → blank
+    // Initial pointerDistPx = 0 means Reality is active before any pointer move.
+    const wordEls = new Map(
+      Array.from(document.querySelectorAll('.brand .word')).map((el) => [el.dataset.word, el])
+    );
+    function wordForPointer(distPx) {
+      const R = 0.05 * window.innerHeight;
+      if (distPx < R)     return 'reality';
+      if (distPx < 2 * R) return 'construction';
+      if (distPx < 3 * R) return 'devices';
+      return null;
+    }
+    let activeWord = 'reality';
+    function setActiveWord(w) {
+      if (w === activeWord) return;
+      activeWord = w;
+      wordEls.forEach((el, word) => el.classList.toggle('is-active', word === w));
+    }
+
+    // Pixel distance from screen centre — drives word selection (see below).
+    let pointerDistPx = 0;
+
+    window.addEventListener('pointermove', (e) => {
+      const nx = (e.clientX / window.innerWidth) * 2 - 1;
+      const ny = (e.clientY / window.innerHeight) * 2 - 1;
+      target.yaw = nx * yawRange * Math.PI;
+      target.pitch = -ny * pitchRange * Math.PI;
+
+      const dx = e.clientX - window.innerWidth / 2;
+      const dy = e.clientY - window.innerHeight / 2;
+      pointerDistPx = Math.hypot(dx, dy);
+    });
+
+    window.addEventListener('resize', () => {
+      const aspect = window.innerWidth / window.innerHeight;
+      camera.left   = -frustumSize * aspect / 2;
+      camera.right  =  frustumSize * aspect / 2;
+      camera.top    =  frustumSize / 2;
+      camera.bottom = -frustumSize / 2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      current.yaw += (target.yaw - current.yaw) * cameraLag;
+      current.pitch += (target.pitch - current.pitch) * cameraLag;
+
+      setActiveWord(wordForPointer(pointerDistPx));
+
+      camera.position.x = Math.sin(current.yaw) * Math.cos(current.pitch) * cameraRadius;
+      camera.position.y = Math.sin(current.pitch) * cameraRadius;
+      camera.position.z = Math.cos(current.yaw) * Math.cos(current.pitch) * cameraRadius;
+      camera.lookAt(0, 0, 0);
+
+      // Logo idle breathing
+      logoGroup.rotation.z = Math.sin(t * 0.3) * 0.03;
+
+      // Monoliths drift / bob
+      monoliths.forEach((m) => {
+        m.position.y = m.userData.baseY + Math.sin(t * m.userData.bobSpeed) * m.userData.bobAmp;
+        m.rotation.x += m.userData.rotSpeed;
+        m.rotation.y += m.userData.rotSpeed * 0.7;
+      });
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
