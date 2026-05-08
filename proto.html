@@ -47,7 +47,9 @@
       letter-spacing: 0.08em;
       pointer-events: none;
       user-select: none;
+      transition: opacity 500ms ease;
     }
+    .brand.is-hidden { opacity: 0; }
     .brand .word {
       color: var(--rcd-dim);
       transition:
@@ -61,15 +63,7 @@
       transform: translateX(0);
       letter-spacing: 0.14em;
     }
-    .brand .word[data-word="reality"].is-active {
-      color: var(--rcd-orange);
-      text-shadow: 0 0 24px rgba(255, 138, 48, 0.55), 0 0 48px rgba(255, 138, 48, 0.18);
-    }
-    .brand .word[data-word="construction"].is-active {
-      color: var(--rcd-cyan);
-      text-shadow: 0 0 24px rgba(0, 212, 240, 0.55), 0 0 48px rgba(0, 212, 240, 0.18);
-    }
-    .brand .word[data-word="devices"].is-active {
+    .brand .word.is-active {
       color: var(--rcd-light);
       text-shadow: 0 0 24px rgba(234, 244, 245, 0.55), 0 0 48px rgba(234, 244, 245, 0.18);
     }
@@ -90,58 +84,6 @@
     .footer a { color: inherit; text-decoration: none; }
     .footer a:hover { opacity: 1; }
 
-    /* Solo / debug picker — radio list to isolate one polygon at a time. */
-    .solo-panel {
-      position: fixed;
-      top: 22px;
-      right: 22px;
-      z-index: 3;
-      background: rgba(7, 9, 12, 0.72);
-      border: 1px solid rgba(234, 244, 245, 0.1);
-      border-radius: 6px;
-      padding: 10px 12px;
-      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: rgba(234, 244, 245, 0.85);
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      user-select: none;
-      max-height: 80vh;
-      overflow-y: auto;
-    }
-    .solo-panel .title {
-      font-size: 9px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      opacity: 0.5;
-      margin-bottom: 6px;
-      padding-bottom: 4px;
-      border-bottom: 1px solid rgba(234, 244, 245, 0.08);
-    }
-    .solo-panel label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      padding: 1px 0;
-    }
-    .solo-panel label:hover { color: #fff; }
-    .solo-panel input[type="radio"] {
-      margin: 0;
-      accent-color: #00D4F0;
-    }
-    .solo-panel .swatch {
-      width: 10px; height: 10px;
-      border-radius: 2px;
-      display: inline-block;
-      border: 1px solid rgba(255,255,255,0.15);
-    }
-    .solo-panel .meta {
-      opacity: 0.45;
-      font-size: 10px;
-      margin-left: auto;
-    }
-
   </style>
   <script type="importmap">
   {
@@ -157,18 +99,13 @@
 
   <div class="brand" aria-hidden="true">
     <span class="word is-active" data-word="reality">Reality</span>
-    <span class="word" data-word="construction">Construction</span>
-    <span class="word" data-word="devices">Devices</span>
+    <span class="word is-active" data-word="construction">Construction</span>
+    <span class="word is-active" data-word="devices">Devices</span>
   </div>
 
   <div class="footer">
     <a href="mailto:info@realitydevices.au">info@realitydevices.au</a>
   </div>
-
-  <aside class="solo-panel" aria-label="Polygon picker">
-    <div class="title">isolate</div>
-    <label><input type="radio" name="solo" value="all" checked><span class="swatch" style="background:transparent;border-style:dashed"></span><span>all</span></label>
-  </aside>
 
   <script type="module">
     import * as THREE from 'three';
@@ -183,53 +120,214 @@
     const monolithCount = 12;
     const fogDensity = 0.004;
     const DEBUG = false;
+    // Backplate sits behind the trim layer so the thin trim pieces read as
+    // part of a coherent back panel instead of hanging in empty space.
+    const backplateImage = './rcd.svg'; // null;   // null = solid white; or e.g. './backplate.png'
+    const backplateColor = 0x999999;
+    const backplateZ = -1001;      // just behind trim plane (-1000) to avoid z-fight
 
     // --- Component-based plane assignment ---
     // Each <path> in rcd.svg carries an id (p0..p14). We look up extrusion
-    // depth by id, not by fill colour — fills repeat across paths so colour
+    // span by id, not by fill colour — fills repeat across paths so colour
     // is not a unique key. Coplanar groups are explicit: paths sharing a
-    // `plane` value get the same depth, period.
+    // `plane` value get the same span, period.
     //
     // Units: SVG pre-scale. SVG bbox ≈ 1145 tall, scaled to a 20-unit-tall
-    // logo, so effective world-depth ≈ depth / ~57.
+    // logo, so effective world-depth ≈ z / ~57.
     //
-    // Planes (back to front, smaller depth = further from camera):
-    //   cube — the three iso-cube parallelograms (sits on the back plane)
-    //   trim — non-letter trim bits (orange bottom/right, blue right)
-    //   r    — the "r" letter (orange wedge proper)
-    //   c    — the "c" letter (cyan)
-    //   d    — the "d" letter (inner light face) — sticks out furthest
-    const planeDepth = {
-      cube: 150,
-      trim: 250,
-      r:    400,
-      c:    600,
-      d:    1000,
+    // Each plane carries `{ back, front }` z values in SVG units. The shape
+    // is extruded `front - back` thick and translated so its back face lands
+    // at `back` (front face at `front`). Per-plane thickness lets us beef up
+    // the letters and keep trim thin, etc.
+    //   trim* — non-letter trim bits (orange bottom/right, blue right)
+    //   r     — the "r" letter (orange wedge proper)
+    //   c     — the "c" letter (cyan)
+    //   d     — the "d" letter (inner light face)
+    // (the cube isn't here — see cubeFaces below; it's built as 3 real 3D
+    //  faces sharing a forward-pushed apex, not as flat extrusions.)
+    const planes = {
+      trimblue:       { back: -1000, front: -1000 },
+      trimorange:     { back: -1000, front: -1000    },
+      trimorangedark: { back: -1000,  front: -1000   },
+      r:              { back: 800,  front: 900 },
+      c:              { back: 500,  front: 600  },
+      d:              { back: 200,  front: 300  },
     };
     // null = render-suppressed (mesh not built; not shown in solo panel either).
+    // p11/p12/p13 are the iso-cube parallelograms — built separately as real
+    // 3D faces (see cubeFaces) instead of as flat extrusions.
     const componentPlane = {
-      p0:  'r',      // r — orange letter
-      p1:  'trim',   // orange bottom
+      p0:  'r',                // r — orange letter
+      p1:  'trimorange',       // orange bottom
       // p2 / p3 / p5 / p6 are white background wedges, filtered by colour
-      p4:  'trim',   // orange right
-      p7:  'd',      // d — inner light letter
-      p8:  'c',      // c — cyan letter
-      p9:  'trim',   // blue right
-      p10: null,     // hidden
-      p11: 'cube',   // cube parallelogram
-      p12: 'cube',   // cube parallelogram
-      p13: 'cube',   // cube parallelogram (the inner orange — coplanar with the cyan cube faces)
-      p14: null,     // hidden
+      p4:  'trimorangedark',   // orange right
+      p7:  'd',                // d — inner light letter
+      p8:  'c',                // c — cyan letter
+      p9:  'trimblue',         // blue right
+      p10: null,               // hidden
+      p11: null,               // cube face — built by cubeFaces
+      p12: null,               // cube face — built by cubeFaces
+      p13: null,               // cube face — built by cubeFaces
+      p14: null,               // hidden
     };
     function lookupLayer(id) {
       const plane = componentPlane[id];
-      const depth = plane ? planeDepth[plane] : null;
-      return { depth, plane };
+      const span = plane ? planes[plane] : null;
+      return { span, plane };
+    }
+
+    // --- Iso-cube as a real 3D corner ---
+    // The three SVG parallelograms (p11/p12/p13) all meet at a center vertex.
+    // Instead of extruding them as flat slabs, we hand-build each face as a
+    // single flat (but tilted-in-3D) parallelogram so the three faces meet
+    // at a real 3D apex.
+    //
+    // Vertex z-class explains how a corner participates in the cube:
+    //   apex — the shared front corner (all three faces meet here, fully forward)
+    //   mid  — a corner shared with one neighbouring face (sits halfway forward)
+    //   back — a corner only this face owns (stays on the back plane)
+    // Listing corners in perimeter order with a 'mid–back–mid' between two
+    // 'apex' positions guarantees the 4 corners stay coplanar, so the two
+    // triangles we fan from the apex render as one flat plane (no fold).
+    //
+    // Coords are SVG pre-scale, same space as the path data, so they get
+    // scaled & centred alongside the other meshes.
+    const cubeBaseZ = -400;        // z of the back-only corners (visible "back equator")
+    const cubeApexZ = -50;       // z of the shared front apex
+    const cubeMidZ  = (cubeBaseZ + cubeApexZ) / 2;                 // "front equator"
+    const cubeRearZ = cubeBaseZ - (cubeMidZ - cubeBaseZ);          // rear apex — mirror of front apex through cube centre
+    const Z_FOR = { apex: cubeApexZ, mid: cubeMidZ, back: cubeBaseZ, rear: cubeRearZ };
+
+    // Six faces: 3 visible (front apex + 2 mid + 1 back) and 3 hidden
+    // (rear apex + 1 mid + 2 back). Each hidden face is the cube-centre
+    // mirror of a visible face and shares its fill colour. Hex-point xy
+    // coords are reused so shared edges meet without gaps.
+    const cubeFaces = [
+      // ---- visible (front) ----
+      { id: 'p11', fill: '#00D4F0',                      // LEFT face
+        corners: [
+          [574, 575, 'apex'],                            // shared front
+          [345, 460, 'mid' ],                            // top-left  (shared w/ TOP)
+          [345, 683, 'back'],                            // bottom-left (LEFT-only)
+          [572, 802, 'mid' ],                            // bottom    (shared w/ RIGHT)
+        ]},
+      { id: 'p12', fill: '#0090A3',                      // TOP face
+        corners: [
+          [574, 574, 'apex'],
+          [346, 460, 'mid' ],                            // top-left  (shared w/ LEFT)
+          [572, 346, 'back'],                            // top       (TOP-only)
+          [800, 460, 'mid' ],                            // top-right (shared w/ RIGHT)
+        ]},
+      { id: 'p13', fill: '#C75600',                      // RIGHT face
+        corners: [
+          [574, 575, 'apex'],
+          [801, 460, 'mid' ],                            // top-right (shared w/ TOP)
+          [802, 684, 'back'],                            // bottom-right (RIGHT-only)
+          [574, 802, 'mid' ],                            // bottom    (shared w/ LEFT)
+        ]},
+      // ---- hidden (back) — colour-matched to opposite visible face ----
+      { id: 'p11b', fill: '#00D4F0',                     // opposite of LEFT
+        corners: [
+          [574, 575, 'rear'],
+          [802, 684, 'back'],                            // opp of top-left
+          [800, 460, 'mid' ],                            // opp of bottom-left
+          [572, 346, 'back'],                            // opp of bottom
+        ]},
+      { id: 'p12b', fill: '#0090A3',                     // opposite of TOP
+        corners: [
+          [574, 575, 'rear'],
+          [802, 684, 'back'],                            // opp of top-left
+          [572, 802, 'mid' ],                            // opp of top
+          [345, 683, 'back'],                            // opp of top-right
+        ]},
+      { id: 'p13b', fill: '#C75600',                     // opposite of RIGHT
+        corners: [
+          [574, 575, 'rear'],
+          [345, 683, 'back'],                            // opp of top-right
+          [345, 460, 'mid' ],                            // opp of bottom-right
+          [572, 346, 'back'],                            // opp of bottom
+        ]},
+    ];
+    function buildCubeFace(face) {
+      const positions = new Float32Array(12);
+      face.corners.forEach(([x, y, cls], i) => {
+        positions[i * 3]     = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = Z_FOR[cls];
+      });
+      const indices = [0, 1, 2,  0, 2, 3];               // 2 tris, perimeter fan from apex
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
+
+      const baseColor = new THREE.Color().setStyle(face.fill);
+      const material = new THREE.MeshPhysicalMaterial({
+        color: baseColor,
+        emissive: baseColor,
+        emissiveIntensity: 0.25,
+        metalness: 0.3,
+        roughness: 0.35,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.25,
+        side: THREE.DoubleSide,
+        flatShading: true,
+      });
+      return new THREE.Mesh(geom, material);
     }
 
     // Per-id mesh registry — populated as the SVG loads. Lets the solo-radio
     // panel toggle a polygon's visibility without rebuilding geometry.
     const meshesById = new Map();
+
+    // SVG → CanvasTexture: TextureLoader can't decode SVG directly, so for
+    // .svg files we rasterise via an <img> + canvas. Other formats go through
+    // TextureLoader as usual.
+    function loadBackplateTexture(url) {
+      if (/\.svg(\?|#|$)/i.test(url)) {
+        const tex = new THREE.Texture();
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const img = new Image();
+        img.onload = () => {
+          const w = img.naturalWidth || 1144;
+          const h = img.naturalHeight || 1145;
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          tex.image = canvas;
+          tex.needsUpdate = true;
+        };
+        img.onerror = (e) => console.error('[proto] backplate svg load failed:', e);
+        img.src = url;
+        return tex;
+      }
+      return new THREE.TextureLoader().load(url);
+    }
+
+    // Shared backplate material — one instance reused across all silhouette
+    // pieces. Built lazily so the texture only loads when an image is set.
+    const backplateOpacity = 0.2;
+    let backplateMaterial = null;
+    function getBackplateMaterial() {
+      if (backplateMaterial) return backplateMaterial;
+      const transparent = backplateOpacity < 1;
+      backplateMaterial = backplateImage
+        ? new THREE.MeshBasicMaterial({
+            map: loadBackplateTexture(backplateImage),
+            side: THREE.DoubleSide,
+            transparent,
+            opacity: backplateOpacity,
+          })
+        : new THREE.MeshBasicMaterial({
+            color: backplateColor,
+            side: THREE.DoubleSide,
+            transparent,
+            opacity: backplateOpacity,
+          });
+      return backplateMaterial;
+    }
+    const backplateMeshes = [];
 
     // --- Scene / renderer / camera ---
     const scene = new THREE.Scene();
@@ -244,7 +342,7 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.3;
 
     // Orthographic camera = zero perspective distortion. The orbit still reveals
     // the sides of the logo because the camera moves around it; what goes away is
@@ -311,13 +409,32 @@
           // Filter pure-white background wedges; keep #EAF4F5 (inner faces).
           if (color.r > 0.99 && color.g > 0.99 && color.b > 0.99) { skipped++; return; }
 
+          // Backplate silhouette: every non-white path contributes a flat
+          // shape at backplateZ. Union of these = monogram silhouette. Done
+          // even for ids the 3D pass skips (e.g. p11/p12/p13 cube faces,
+          // p10/p14) so the cube footprint is filled in too.
+          SVGLoader.createShapes(path).forEach((shape) => {
+            try {
+              const flat = new THREE.ShapeGeometry(shape);
+              const m = new THREE.Mesh(flat, getBackplateMaterial());
+              m.position.z = backplateZ;
+              tempGroup.add(m);
+              backplateMeshes.push(m);
+            } catch (e) {
+              console.error(`[proto] backplate shape failed for ${id}:`, e);
+            }
+          });
+
           // componentPlane null/undefined = explicit render-suppression (e.g. p10, p14).
-          const { depth, plane } = lookupLayer(id);
+          const { span, plane } = lookupLayer(id);
           if (!plane) { skipped++; return; }
           kept++;
+          const thickness = span.front - span.back;
 
           const material = new THREE.MeshPhysicalMaterial({
             color,
+            emissive: color,
+            emissiveIntensity: 0.25,
             metalness: 0.3,
             roughness: 0.35,
             clearcoat: 0.6,
@@ -326,12 +443,12 @@
           });
 
           const shapes = SVGLoader.createShapes(path);
-          console.log(`[proto] ${id} fill=${fill} plane=${plane} depth=${depth} shapes=${shapes.length}`);
+          console.log(`[proto] ${id} fill=${fill} plane=${plane} span=${span.back}..${span.front} shapes=${shapes.length}`);
           const meshesForId = [];
           shapes.forEach((shape, si) => {
             try {
               const geom = new THREE.ExtrudeGeometry(shape, {
-                depth,
+                depth: thickness,
                 bevelEnabled: true,
                 bevelThickness: 0.4,
                 bevelSize: 0.4,
@@ -339,6 +456,8 @@
                 curveSegments: 12,
               });
               const mesh = new THREE.Mesh(geom, material);
+              // Extrusion runs 0..thickness; translate so back face sits at span.back.
+              mesh.position.z = span.back;
               tempGroup.add(mesh);
               meshesForId.push(mesh);
             } catch (e) {
@@ -352,6 +471,39 @@
       });
 
       console.log('[proto] paths kept:', kept, 'skipped:', skipped, 'meshes:', tempGroup.children.length);
+
+      // Build the iso-cube as 3 real 3D faces sharing a forward-pushed apex.
+      // Added to tempGroup so they get the same scale/centring as the SVG paths.
+      cubeFaces.forEach((face) => {
+        const mesh = buildCubeFace(face);
+        tempGroup.add(mesh);
+        meshesById.set(face.id, { meshes: [mesh], fill: face.fill, plane: 'cube' });
+      });
+
+      if (backplateMeshes.length) {
+        // Remap UVs so the texture spans the silhouette's union bbox instead
+        // of tiling once per shape. SVG y is inverted vs texture v.
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        backplateMeshes.forEach((m) => {
+          const pos = m.geometry.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i), y = pos.getY(i);
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        });
+        const w = maxX - minX, h = maxY - minY;
+        backplateMeshes.forEach((m) => {
+          const pos = m.geometry.attributes.position;
+          const uv = new Float32Array(pos.count * 2);
+          for (let i = 0; i < pos.count; i++) {
+            uv[i * 2]     = (pos.getX(i) - minX) / w;
+            uv[i * 2 + 1] = 1 - (pos.getY(i) - minY) / h;
+          }
+          m.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        });
+        meshesById.set('backplate', { meshes: backplateMeshes, fill: '#ffffff', plane: 'backplate' });
+      }
 
       // Measure raw bbox to compute uniform scale.
       box.setFromObject(tempGroup);
@@ -369,43 +521,9 @@
       tempGroup.position.sub(scaledCenter);
 
       logoGroup.add(tempGroup);
-      populateSoloPanel();
     }, undefined, (err) => {
       console.error('[proto] SVG load error:', err);
     });
-
-    // --- Solo radio panel ---
-    // Sorted by id (p0, p1, ... p14). Each radio shows a colour swatch and the
-    // resolved plane name, so you can correlate id ↔ visual polygon ↔ plane
-    // group at a glance. Selecting a radio toggles mesh visibility — geometry
-    // stays in scene, no rebuild.
-    const soloPanel = document.querySelector('.solo-panel');
-    function populateSoloPanel() {
-      const ids = Array.from(meshesById.keys()).sort((a, b) => {
-        const na = parseInt(a.replace(/\D/g, ''), 10);
-        const nb = parseInt(b.replace(/\D/g, ''), 10);
-        return na - nb;
-      });
-      for (const id of ids) {
-        const { fill, plane } = meshesById.get(id);
-        const label = document.createElement('label');
-        label.innerHTML =
-          `<input type="radio" name="solo" value="${id}">` +
-          `<span class="swatch" style="background:${fill}"></span>` +
-          `<span>${id}</span>` +
-          `<span class="meta">${plane ?? '—'}</span>`;
-        soloPanel.appendChild(label);
-      }
-      soloPanel.addEventListener('change', (e) => {
-        if (e.target?.name === 'solo') applySolo(e.target.value);
-      });
-    }
-    function applySolo(val) {
-      meshesById.forEach(({ meshes }, id) => {
-        const visible = val === 'all' || val === id;
-        meshes.forEach((m) => { m.visible = visible; });
-      });
-    }
 
     // --- Background: 3 particle shells ---
     function makeParticleShell(count, radius, color, size) {
@@ -479,31 +597,18 @@
     const target = { yaw: 0, pitch: 0 };
     const current = { yaw: 0, pitch: 0 };
 
-    // --- Distance-from-centre word highlight ---
-    // R = 10% of viewport height. Concentric rings select the word:
-    //   d  <  R  → reality       (neutral, page-load default)
-    //   R  ≤ d < 2R → construction
-    //   2R ≤ d < 3R → devices
-    //   d  ≥ 3R → blank
-    // Initial pointerDistPx = 0 means Reality is active before any pointer move.
-    const wordEls = new Map(
-      Array.from(document.querySelectorAll('.brand .word')).map((el) => [el.dataset.word, el])
-    );
-    function wordForPointer(distPx) {
-      const R = 0.05 * window.innerHeight;
-      if (distPx < R)     return 'reality';
-      if (distPx < 2 * R) return 'construction';
-      if (distPx < 3 * R) return 'devices';
-      return null;
-    }
-    let activeWord = 'reality';
-    function setActiveWord(w) {
-      if (w === activeWord) return;
-      activeWord = w;
-      wordEls.forEach((el, word) => el.classList.toggle('is-active', word === w));
+    // --- Brand visibility: shown when the pointer is near the centre, faded
+    // out beyond the threshold. Single knob — same boundary as the old "edge
+    // of devices" ring (15% of viewport height).
+    const brandEl = document.querySelector('.brand');
+    const brandRadiusFrac = 0.15;
+    let brandVisible = true;
+    function setBrandVisible(v) {
+      if (v === brandVisible) return;
+      brandVisible = v;
+      brandEl.classList.toggle('is-hidden', !v);
     }
 
-    // Pixel distance from screen centre — drives word selection (see below).
     let pointerDistPx = 0;
 
     window.addEventListener('pointermove', (e) => {
@@ -535,7 +640,7 @@
       current.yaw += (target.yaw - current.yaw) * cameraLag;
       current.pitch += (target.pitch - current.pitch) * cameraLag;
 
-      setActiveWord(wordForPointer(pointerDistPx));
+      setBrandVisible(pointerDistPx < brandRadiusFrac * window.innerHeight);
 
       camera.position.x = Math.sin(current.yaw) * Math.cos(current.pitch) * cameraRadius;
       camera.position.y = Math.sin(current.pitch) * cameraRadius;
