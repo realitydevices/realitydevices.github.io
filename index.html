@@ -611,6 +611,22 @@
 
     let pointerDistPx = 0;
 
+    // --- Headless capture hook ---
+    // Lets the harness (or any visitor) pin the camera via URL params, e.g.
+    // ?yaw=1.0&pitch=0.5&nobrand=1&capture=120 — used by capture.sh.
+    // Setting both target and current bypasses the lerp so the first rendered
+    // frame is final. `capture=N` runs the animate loop for N frames and then
+    // halts requestAnimationFrame, letting the page go idle so Chrome
+    // headless can fire its screenshot (otherwise the perpetual RAF loop
+    // pegs CPU and never triggers a snapshot).
+    {
+      const _p = new URLSearchParams(location.search);
+      if (_p.has('yaw'))   target.yaw   = current.yaw   = parseFloat(_p.get('yaw'));
+      if (_p.has('pitch')) target.pitch = current.pitch = parseFloat(_p.get('pitch'));
+      if (_p.has('nobrand') && brandEl) brandEl.classList.add('is-hidden');
+      if (_p.has('capture')) window.__captureFrames = parseInt(_p.get('capture'), 10) || 120;
+    }
+
     window.addEventListener('pointermove', (e) => {
       const nx = (e.clientX / window.innerWidth) * 2 - 1;
       const ny = (e.clientY / window.innerHeight) * 2 - 1;
@@ -634,7 +650,11 @@
 
     const clock = new THREE.Clock();
     function animate() {
-      requestAnimationFrame(animate);
+      // In capture mode, run for a finite number of frames then stop the loop
+      // so the page goes idle and Chrome headless takes its snapshot.
+      if (window.__captureFrames === undefined || window.__captureFrames-- > 0) {
+        requestAnimationFrame(animate);
+      }
       const t = clock.getElapsedTime();
 
       current.yaw += (target.yaw - current.yaw) * cameraLag;
