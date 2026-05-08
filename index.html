@@ -1,202 +1,665 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- [Previous head section and styles remain exactly the same] -->
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reality Devices</title>
+  <title>realitydevices.au:1.0.0</title>
   <style>
-    /* Import Lexend Peta font */
-    @import url('https://fonts.googleapis.com/css2?family=Lexend+Peta&display=swap');
-    
-    /* General styling */
-    body, html {
-      margin: 0;
-      overflow: hidden;
-      background-color: #EAF4F5;
-      font-family: 'Lexend Peta', sans-serif;
-      position: relative;
+    @import url('https://fonts.googleapis.com/css2?family=Lexend+Peta:wght@400;700&display=swap');
+
+    /* Per-surface palette, taken straight from rcd.svg. */
+    :root {
+      --rcd-orange: #FF8A30;   /* r — outer wedge */
+      --rcd-cyan:   #00D4F0;   /* c — middle cube */
+      --rcd-light:  #EAF4F5;   /* d — inner faces */
+      --rcd-dim:    rgba(234, 244, 245, 0.10);
+    }
+
+    html, body { margin: 0; height: 100%; background: #07090c; overflow: hidden; }
+    body {
+      font-family: 'Lexend Peta', system-ui, sans-serif;
+      color: var(--rcd-light);
+      -webkit-font-smoothing: antialiased;
+    }
+    canvas { display: block; }
+
+    #scene-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
       height: 100vh;
-    }
-    canvas {
-      display: block;
+      z-index: 0;
     }
 
-    /* Overlay styling */
-    .overlay {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      color: #333;
-      background-color: rgba(255, 255, 255, 0.9);
-      padding: 10px;
-      border-radius: 8px;
+    /* Brand stack — three words. The active one (driven by camera yaw) lights up
+       in its surface colour; the others sit dim. */
+    .brand {
+      position: fixed;
+      top: 50%;
+      left: 6vw;
+      transform: translateY(-50%);
+      z-index: 2;
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      gap: 0.55em;
+      font-size: clamp(18px, 2.4vw, 32px);
+      line-height: 1;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      user-select: none;
+      transition: opacity 500ms ease;
+    }
+    .brand.is-hidden { opacity: 0; }
+    .brand .word {
+      color: var(--rcd-dim);
+      transition:
+        color 500ms ease,
+        text-shadow 500ms ease,
+        letter-spacing 500ms ease,
+        transform 500ms ease;
+      transform: translateX(-4px);
+    }
+    .brand .word.is-active {
+      transform: translateX(0);
+      letter-spacing: 0.14em;
+    }
+    .brand .word.is-active {
+      color: var(--rcd-light);
+      text-shadow: 0 0 24px rgba(234, 244, 245, 0.55), 0 0 48px rgba(234, 244, 245, 0.18);
     }
 
-    /* Footer styling */
     .footer {
-      position: absolute;
-      bottom: 20px;
+      position: fixed;
+      bottom: 22px;
       left: 50%;
       transform: translateX(-50%);
-      color: #333;
-      background-color: rgba(255, 255, 255, 0.9);
-      padding: 10px 20px;
-      border-radius: 8px;
-      text-align: center;
-      font-size: 0.85em;
+      z-index: 2;
+      font-family: 'Lexend Peta', system-ui, sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      color: var(--rcd-cyan);
+      opacity: 0.75;
+      pointer-events: auto;
     }
+    .footer a { color: inherit; text-decoration: none; }
+    .footer a:hover { opacity: 1; }
 
-    /* Logo styling */
-    .logo {
-      height: 80px;
-      margin-right: 20px;
-    }
-
-    /* Brand text */
-    .brand-text {
-      color: #0090A3;
-      line-height: 1.6;
-    }
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
-  <!-- [Previous HTML structure remains exactly the same] -->
-  <canvas id="background-canvas"></canvas>
+  <canvas id="scene-canvas"></canvas>
 
-  <div class="overlay">
-    <img src="rcd_logo.png" alt="Reality Devices Logo" class="logo">
-    <div class="brand-text">
-      Reality<br/>Construction<br/>Devices
-    </div>
+  <div class="brand" aria-hidden="true">
+    <span class="word is-active" data-word="reality">Reality</span>
+    <span class="word is-active" data-word="construction">Construction</span>
+    <span class="word is-active" data-word="devices">Devices</span>
   </div>
 
   <div class="footer">
-    <div class="brand-text">
-      info@realitydevices.au
-    </div>
+    <a href="mailto:info@realitydevices.au">info@realitydevices.au</a>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
 
-  <script>
-    // Basic Three.js setup
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('background-canvas'), alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    camera.position.z = 15;
+    // --- Tunables (see SPEC.md "Tuning knobs") ---
+    const cameraRadius = 70;
+    const yawRange = 0.6;     // ~ ±108° (multiplied by Math.PI / yawRange-ish below)
+    const pitchRange = 0.25;  // ~ ±45°
+    const cameraLag = 0.05;
+    const frustumSize = 60;   // Orthographic camera "zoom". Smaller = closer.
+    const monolithCount = 12;
+    const fogDensity = 0.004;
+    const DEBUG = false;
+    // Backplate sits behind the trim layer so the thin trim pieces read as
+    // part of a coherent back panel instead of hanging in empty space.
+    const backplateImage = './rcd.svg'; // null;   // null = solid white; or e.g. './backplate.png'
+    const backplateColor = 0x999999;
+    const backplateZ = -1001;      // just behind trim plane (-1000) to avoid z-fight
 
-    // Adjustable parameters
-    const SHAPE_SCALE = 2.0;          // Double the size of shapes
-    const ROTATION_MULTIPLIER = 10.0;  // Increase rotation speed at edges
-    const BASE_ROTATION_SPEED = 0.001;
-    const GRID_SPACING = 4 * SHAPE_SCALE; // Adjust spacing based on shape size
-
-    // Function to generate random geometry (note the increased size)
-    function createRandomGeometry() {
-      const geometries = [
-        () => new THREE.BoxGeometry(SHAPE_SCALE, SHAPE_SCALE, SHAPE_SCALE),
-        () => new THREE.OctahedronGeometry(0.8 * SHAPE_SCALE),
-        () => new THREE.TetrahedronGeometry(0.8 * SHAPE_SCALE),
-        () => new THREE.DodecahedronGeometry(0.8 * SHAPE_SCALE),
-        () => new THREE.IcosahedronGeometry(0.8 * SHAPE_SCALE)
-      ];
-      return geometries[Math.floor(Math.random() * geometries.length)]();
+    // --- Component-based plane assignment ---
+    // Each <path> in rcd.svg carries an id (p0..p14). We look up extrusion
+    // span by id, not by fill colour — fills repeat across paths so colour
+    // is not a unique key. Coplanar groups are explicit: paths sharing a
+    // `plane` value get the same span, period.
+    //
+    // Units: SVG pre-scale. SVG bbox ≈ 1145 tall, scaled to a 20-unit-tall
+    // logo, so effective world-depth ≈ z / ~57.
+    //
+    // Each plane carries `{ back, front }` z values in SVG units. The shape
+    // is extruded `front - back` thick and translated so its back face lands
+    // at `back` (front face at `front`). Per-plane thickness lets us beef up
+    // the letters and keep trim thin, etc.
+    //   trim* — non-letter trim bits (orange bottom/right, blue right)
+    //   r     — the "r" letter (orange wedge proper)
+    //   c     — the "c" letter (cyan)
+    //   d     — the "d" letter (inner light face)
+    // (the cube isn't here — see cubeFaces below; it's built as 3 real 3D
+    //  faces sharing a forward-pushed apex, not as flat extrusions.)
+    const planes = {
+      trimblue:       { back: -1000, front: -1000 },
+      trimorange:     { back: -1000, front: -1000    },
+      trimorangedark: { back: -1000,  front: -1000   },
+      r:              { back: 800,  front: 900 },
+      c:              { back: 500,  front: 600  },
+      d:              { back: 200,  front: 300  },
+    };
+    // null = render-suppressed (mesh not built; not shown in solo panel either).
+    // p11/p12/p13 are the iso-cube parallelograms — built separately as real
+    // 3D faces (see cubeFaces) instead of as flat extrusions.
+    const componentPlane = {
+      p0:  'r',                // r — orange letter
+      p1:  'trimorange',       // orange bottom
+      // p2 / p3 / p5 / p6 are white background wedges, filtered by colour
+      p4:  'trimorangedark',   // orange right
+      p7:  'd',                // d — inner light letter
+      p8:  'c',                // c — cyan letter
+      p9:  'trimblue',         // blue right
+      p10: null,               // hidden
+      p11: null,               // cube face — built by cubeFaces
+      p12: null,               // cube face — built by cubeFaces
+      p13: null,               // cube face — built by cubeFaces
+      p14: null,               // hidden
+    };
+    function lookupLayer(id) {
+      const plane = componentPlane[id];
+      const span = plane ? planes[plane] : null;
+      return { span, plane };
     }
 
-    // [Previous material creation function remains exactly the same]
-    function createRandomMaterial() {
-      const baseColor = new THREE.Color(0x0090A3);
-      const hsl = {};
-      baseColor.getHSL(hsl);
-      
-      const newHue = (hsl.h + (Math.random() * 0.2 - 0.1) + 1) % 1;
-      const newSat = Math.max(0, Math.min(1, hsl.s + (Math.random() * 0.2 - 0.1)));
-      
-      const newColor = new THREE.Color().setHSL(newHue, newSat, hsl.l);
-      return new THREE.MeshBasicMaterial({ 
-        color: newColor, 
-        wireframe: true,
-        wireframeLinewidth: 1 + Math.random()
+    // --- Iso-cube as a real 3D corner ---
+    // The three SVG parallelograms (p11/p12/p13) all meet at a center vertex.
+    // Instead of extruding them as flat slabs, we hand-build each face as a
+    // single flat (but tilted-in-3D) parallelogram so the three faces meet
+    // at a real 3D apex.
+    //
+    // Vertex z-class explains how a corner participates in the cube:
+    //   apex — the shared front corner (all three faces meet here, fully forward)
+    //   mid  — a corner shared with one neighbouring face (sits halfway forward)
+    //   back — a corner only this face owns (stays on the back plane)
+    // Listing corners in perimeter order with a 'mid–back–mid' between two
+    // 'apex' positions guarantees the 4 corners stay coplanar, so the two
+    // triangles we fan from the apex render as one flat plane (no fold).
+    //
+    // Coords are SVG pre-scale, same space as the path data, so they get
+    // scaled & centred alongside the other meshes.
+    const cubeBaseZ = -400;        // z of the back-only corners (visible "back equator")
+    const cubeApexZ = -50;       // z of the shared front apex
+    const cubeMidZ  = (cubeBaseZ + cubeApexZ) / 2;                 // "front equator"
+    const cubeRearZ = cubeBaseZ - (cubeMidZ - cubeBaseZ);          // rear apex — mirror of front apex through cube centre
+    const Z_FOR = { apex: cubeApexZ, mid: cubeMidZ, back: cubeBaseZ, rear: cubeRearZ };
+
+    // Six faces: 3 visible (front apex + 2 mid + 1 back) and 3 hidden
+    // (rear apex + 1 mid + 2 back). Each hidden face is the cube-centre
+    // mirror of a visible face and shares its fill colour. Hex-point xy
+    // coords are reused so shared edges meet without gaps.
+    const cubeFaces = [
+      // ---- visible (front) ----
+      { id: 'p11', fill: '#00D4F0',                      // LEFT face
+        corners: [
+          [574, 575, 'apex'],                            // shared front
+          [345, 460, 'mid' ],                            // top-left  (shared w/ TOP)
+          [345, 683, 'back'],                            // bottom-left (LEFT-only)
+          [572, 802, 'mid' ],                            // bottom    (shared w/ RIGHT)
+        ]},
+      { id: 'p12', fill: '#0090A3',                      // TOP face
+        corners: [
+          [574, 574, 'apex'],
+          [346, 460, 'mid' ],                            // top-left  (shared w/ LEFT)
+          [572, 346, 'back'],                            // top       (TOP-only)
+          [800, 460, 'mid' ],                            // top-right (shared w/ RIGHT)
+        ]},
+      { id: 'p13', fill: '#C75600',                      // RIGHT face
+        corners: [
+          [574, 575, 'apex'],
+          [801, 460, 'mid' ],                            // top-right (shared w/ TOP)
+          [802, 684, 'back'],                            // bottom-right (RIGHT-only)
+          [574, 802, 'mid' ],                            // bottom    (shared w/ LEFT)
+        ]},
+      // ---- hidden (back) — colour-matched to opposite visible face ----
+      { id: 'p11b', fill: '#00D4F0',                     // opposite of LEFT
+        corners: [
+          [574, 575, 'rear'],
+          [802, 684, 'back'],                            // opp of top-left
+          [800, 460, 'mid' ],                            // opp of bottom-left
+          [572, 346, 'back'],                            // opp of bottom
+        ]},
+      { id: 'p12b', fill: '#0090A3',                     // opposite of TOP
+        corners: [
+          [574, 575, 'rear'],
+          [802, 684, 'back'],                            // opp of top-left
+          [572, 802, 'mid' ],                            // opp of top
+          [345, 683, 'back'],                            // opp of top-right
+        ]},
+      { id: 'p13b', fill: '#C75600',                     // opposite of RIGHT
+        corners: [
+          [574, 575, 'rear'],
+          [345, 683, 'back'],                            // opp of top-right
+          [345, 460, 'mid' ],                            // opp of bottom-right
+          [572, 346, 'back'],                            // opp of bottom
+        ]},
+    ];
+    function buildCubeFace(face) {
+      const positions = new Float32Array(12);
+      face.corners.forEach(([x, y, cls], i) => {
+        positions[i * 3]     = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = Z_FOR[cls];
       });
+      const indices = [0, 1, 2,  0, 2, 3];               // 2 tris, perimeter fan from apex
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
+
+      const baseColor = new THREE.Color().setStyle(face.fill);
+      const material = new THREE.MeshPhysicalMaterial({
+        color: baseColor,
+        emissive: baseColor,
+        emissiveIntensity: 0.25,
+        metalness: 0.3,
+        roughness: 0.35,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.25,
+        side: THREE.DoubleSide,
+        flatShading: true,
+      });
+      return new THREE.Mesh(geom, material);
     }
 
-    // Calculate grid size to ensure coverage to edges
-    const gridWidth = Math.ceil(window.innerWidth / (GRID_SPACING * 50)) + 4;  // Added extra tiles
-    const gridHeight = Math.ceil(window.innerHeight / (GRID_SPACING * 50)) + 4;
-    const offsetX = -(gridWidth * GRID_SPACING) / 2 + GRID_SPACING / 2;
-    const offsetY = -(gridHeight * GRID_SPACING) / 2 + GRID_SPACING / 2;
+    // Per-id mesh registry — populated as the SVG loads. Lets the solo-radio
+    // panel toggle a polygon's visibility without rebuilding geometry.
+    const meshesById = new Map();
 
-    // Create shapes in a grid pattern
-    const shapes = [];
-    for (let x = 0; x < gridWidth; x++) {
-      for (let y = 0; y < gridHeight; y++) {
-        const group = new THREE.Group();
-        
-        const numShapes = 2 + Math.floor(Math.random());
-        for (let j = 0; j < numShapes; j++) {
-          const mesh = new THREE.Mesh(createRandomGeometry(), createRandomMaterial());
-          mesh.position.set(
-            Math.random() * 0.5 * SHAPE_SCALE,
-            Math.random() * 0.5 * SHAPE_SCALE,
-            Math.random() * 0.5 * SHAPE_SCALE
-          );
-          mesh.rotation.set(
-            Math.random() * Math.PI,
-            Math.random() * Math.PI,
-            Math.random() * Math.PI
-          );
-          group.add(mesh);
-        }
-        
-        group.position.set(
-          offsetX + x * GRID_SPACING,
-          offsetY + y * GRID_SPACING,
-          0
-        );
-        
-        scene.add(group);
-        shapes.push(group);
+    // SVG → CanvasTexture: TextureLoader can't decode SVG directly, so for
+    // .svg files we rasterise via an <img> + canvas. Other formats go through
+    // TextureLoader as usual.
+    function loadBackplateTexture(url) {
+      if (/\.svg(\?|#|$)/i.test(url)) {
+        const tex = new THREE.Texture();
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const img = new Image();
+        img.onload = () => {
+          const w = img.naturalWidth || 1144;
+          const h = img.naturalHeight || 1145;
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          tex.image = canvas;
+          tex.needsUpdate = true;
+        };
+        img.onerror = (e) => console.error('[proto] backplate svg load failed:', e);
+        img.src = url;
+        return tex;
       }
+      return new THREE.TextureLoader().load(url);
     }
 
-    let mouseX = 0;
-    let mouseY = 0;
+    // Shared backplate material — one instance reused across all silhouette
+    // pieces. Built lazily so the texture only loads when an image is set.
+    const backplateOpacity = 0.2;
+    let backplateMaterial = null;
+    function getBackplateMaterial() {
+      if (backplateMaterial) return backplateMaterial;
+      const transparent = backplateOpacity < 1;
+      backplateMaterial = backplateImage
+        ? new THREE.MeshBasicMaterial({
+            map: loadBackplateTexture(backplateImage),
+            side: THREE.DoubleSide,
+            transparent,
+            opacity: backplateOpacity,
+          })
+        : new THREE.MeshBasicMaterial({
+            color: backplateColor,
+            side: THREE.DoubleSide,
+            transparent,
+            opacity: backplateOpacity,
+          });
+      return backplateMaterial;
+    }
+    const backplateMeshes = [];
 
-    document.addEventListener('mousemove', (event) => {
-      mouseX = (event.clientX / window.innerWidth) * 2 - 1;
-      mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+    // --- Scene / renderer / camera ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x07090c);
+    scene.fog = new THREE.FogExp2(0x07090c, fogDensity);
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas: document.getElementById('scene-canvas'),
+      antialias: true,
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.3;
+
+    // Orthographic camera = zero perspective distortion. The orbit still reveals
+    // the sides of the logo because the camera moves around it; what goes away is
+    // the fisheye/foreshortening you get from a wide-FOV perspective lens.
+    const aspect0 = window.innerWidth / window.innerHeight;
+    const camera = new THREE.OrthographicCamera(
+      -frustumSize * aspect0 / 2,
+       frustumSize * aspect0 / 2,
+       frustumSize / 2,
+      -frustumSize / 2,
+       0.1, 2000,
+    );
+
+    // --- Lights: warm orange left, cool cyan right ---
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6)); // was 0.18 — brighter for debug
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    keyLight.position.set(40, 60, 40);
+    scene.add(keyLight);
+
+    const warmLight = new THREE.PointLight(0xff7a1a, 2.5, 300, 2.0);
+    warmLight.position.set(-50, 10, 30);
+    scene.add(warmLight);
+
+    const coolLight = new THREE.PointLight(0x00d4f0, 2.0, 300, 2.0);
+    coolLight.position.set(50, -10, 30);
+    scene.add(coolLight);
+
+    // --- DEBUG: known-good objects so we can confirm the render pipeline ---
+    if (DEBUG) {
+      const debugCube = new THREE.Mesh(
+        new THREE.BoxGeometry(10, 10, 10),
+        new THREE.MeshStandardMaterial({ color: 0xff0066, emissive: 0x440022 })
+      );
+      debugCube.position.set(0, 0, 0);
+      scene.add(debugCube);
+
+      const debugSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(3, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+      );
+      debugSphere.position.set(20, 0, 0);
+      scene.add(debugSphere);
+    }
+
+    // --- Logo group (filled by SVGLoader) ---
+    const logoGroup = new THREE.Group();
+    scene.add(logoGroup);
+
+    const loader = new SVGLoader();
+    loader.load('rcd.svg', (data) => {
+      console.log('[proto] SVG loaded. paths:', data.paths.length);
+      const tempGroup = new THREE.Group();
+      const box = new THREE.Box3();
+      let kept = 0, skipped = 0;
+
+      data.paths.forEach((path, pi) => {
+        try {
+          const id = path.userData?.node?.id || `auto${pi}`;
+          const fill = path.userData?.style?.fill;
+          if (!fill || fill === 'none') { skipped++; return; }
+
+          const color = new THREE.Color().setStyle(fill);
+          // Filter pure-white background wedges; keep #EAF4F5 (inner faces).
+          if (color.r > 0.99 && color.g > 0.99 && color.b > 0.99) { skipped++; return; }
+
+          // Backplate silhouette: every non-white path contributes a flat
+          // shape at backplateZ. Union of these = monogram silhouette. Done
+          // even for ids the 3D pass skips (e.g. p11/p12/p13 cube faces,
+          // p10/p14) so the cube footprint is filled in too.
+          SVGLoader.createShapes(path).forEach((shape) => {
+            try {
+              const flat = new THREE.ShapeGeometry(shape);
+              const m = new THREE.Mesh(flat, getBackplateMaterial());
+              m.position.z = backplateZ;
+              tempGroup.add(m);
+              backplateMeshes.push(m);
+            } catch (e) {
+              console.error(`[proto] backplate shape failed for ${id}:`, e);
+            }
+          });
+
+          // componentPlane null/undefined = explicit render-suppression (e.g. p10, p14).
+          const { span, plane } = lookupLayer(id);
+          if (!plane) { skipped++; return; }
+          kept++;
+          const thickness = span.front - span.back;
+
+          const material = new THREE.MeshPhysicalMaterial({
+            color,
+            emissive: color,
+            emissiveIntensity: 0.25,
+            metalness: 0.3,
+            roughness: 0.35,
+            clearcoat: 0.6,
+            clearcoatRoughness: 0.25,
+            side: THREE.DoubleSide,
+          });
+
+          const shapes = SVGLoader.createShapes(path);
+          console.log(`[proto] ${id} fill=${fill} plane=${plane} span=${span.back}..${span.front} shapes=${shapes.length}`);
+          const meshesForId = [];
+          shapes.forEach((shape, si) => {
+            try {
+              const geom = new THREE.ExtrudeGeometry(shape, {
+                depth: thickness,
+                bevelEnabled: true,
+                bevelThickness: 0.4,
+                bevelSize: 0.4,
+                bevelSegments: 2,
+                curveSegments: 12,
+              });
+              const mesh = new THREE.Mesh(geom, material);
+              // Extrusion runs 0..thickness; translate so back face sits at span.back.
+              mesh.position.z = span.back;
+              tempGroup.add(mesh);
+              meshesForId.push(mesh);
+            } catch (e) {
+              console.error(`[proto] extrude failed path ${pi} shape ${si}:`, e);
+            }
+          });
+          meshesById.set(id, { meshes: meshesForId, fill, plane });
+        } catch (e) {
+          console.error(`[proto] path ${pi} threw:`, e);
+        }
+      });
+
+      console.log('[proto] paths kept:', kept, 'skipped:', skipped, 'meshes:', tempGroup.children.length);
+
+      // Build the iso-cube as 3 real 3D faces sharing a forward-pushed apex.
+      // Added to tempGroup so they get the same scale/centring as the SVG paths.
+      cubeFaces.forEach((face) => {
+        const mesh = buildCubeFace(face);
+        tempGroup.add(mesh);
+        meshesById.set(face.id, { meshes: [mesh], fill: face.fill, plane: 'cube' });
+      });
+
+      if (backplateMeshes.length) {
+        // Remap UVs so the texture spans the silhouette's union bbox instead
+        // of tiling once per shape. SVG y is inverted vs texture v.
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        backplateMeshes.forEach((m) => {
+          const pos = m.geometry.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i), y = pos.getY(i);
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        });
+        const w = maxX - minX, h = maxY - minY;
+        backplateMeshes.forEach((m) => {
+          const pos = m.geometry.attributes.position;
+          const uv = new Float32Array(pos.count * 2);
+          for (let i = 0; i < pos.count; i++) {
+            uv[i * 2]     = (pos.getX(i) - minX) / w;
+            uv[i * 2 + 1] = 1 - (pos.getY(i) - minY) / h;
+          }
+          m.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        });
+        meshesById.set('backplate', { meshes: backplateMeshes, fill: '#ffffff', plane: 'backplate' });
+      }
+
+      // Measure raw bbox to compute uniform scale.
+      box.setFromObject(tempGroup);
+      const size = box.getSize(new THREE.Vector3());
+      console.log('[proto] svg bbox size:', size.x, size.y, size.z);
+
+      // Apply scale first (Y-flip baked in), then re-measure & center.
+      // Shrunk 50% from the original 40 to leave room for the brand stack on the left.
+      const targetHeight = 20;
+      const s = size.y > 0 ? targetHeight / size.y : 1;
+      tempGroup.scale.set(s, -s, s);
+
+      const scaledBox = new THREE.Box3().setFromObject(tempGroup);
+      const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+      tempGroup.position.sub(scaledCenter);
+
+      logoGroup.add(tempGroup);
+    }, undefined, (err) => {
+      console.error('[proto] SVG load error:', err);
     });
 
+    // --- Background: 3 particle shells ---
+    function makeParticleShell(count, radius, color, size) {
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        // Random point on sphere
+        const u = Math.random();
+        const v = Math.random();
+        const theta = 2 * Math.PI * u;
+        const phi = Math.acos(2 * v - 1);
+        const r = radius * (0.85 + Math.random() * 0.3);
+        positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = r * Math.cos(phi);
+      }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({
+        color, size, transparent: true, opacity: 0.85,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        sizeAttenuation: true,
+      });
+      return new THREE.Points(geom, mat);
+    }
+    scene.add(makeParticleShell(400, 120, 0xffaa66, 2.0));
+    scene.add(makeParticleShell(700, 250, 0xffffff, 1.6));
+    scene.add(makeParticleShell(1200, 500, 0x66d4f0, 1.4));
+
+    // --- Monoliths: low-poly platonic solids drifting behind the logo ---
+    const monoliths = [];
+    const monolithGeoms = [
+      () => new THREE.IcosahedronGeometry(6 + Math.random() * 4, 0),
+      () => new THREE.OctahedronGeometry(6 + Math.random() * 4, 0),
+      () => new THREE.TetrahedronGeometry(6 + Math.random() * 4, 0),
+    ];
+    for (let i = 0; i < monolithCount; i++) {
+      const geom = monolithGeoms[i % monolithGeoms.length]();
+      const isWarm = i % 2 === 0;
+      const wireframe = i % 3 === 0;
+      const mat = new THREE.MeshStandardMaterial({
+        color: isWarm ? 0xff7a1a : 0x00d4f0,
+        emissive: isWarm ? 0x331100 : 0x003844,
+        roughness: 0.6,
+        metalness: 0.2,
+        transparent: true,
+        opacity: 0.18,
+        wireframe,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      const angle = (i / monolithCount) * Math.PI * 2 + Math.random() * 0.5;
+      const r = 60 + Math.random() * 80;
+      // Distributed all around the logo. With z ∈ [-r-20, +r-20], roughly half
+      // of the monoliths sit in front of the logo and half behind — that's
+      // intentional: foreground monoliths are part of the depth story.
+      mesh.position.set(
+        Math.cos(angle) * r,
+        (Math.random() - 0.5) * 60,
+        Math.sin(angle) * r - 20,
+      );
+      mesh.userData = {
+        bobSpeed: 0.3 + Math.random() * 0.4,
+        bobAmp: 1 + Math.random() * 2,
+        baseY: mesh.position.y,
+        rotSpeed: (Math.random() - 0.5) * 0.005,
+      };
+      scene.add(mesh);
+      monoliths.push(mesh);
+    }
+
+    // --- Camera orbit (mouse-driven, lerped) ---
+    const target = { yaw: 0, pitch: 0 };
+    const current = { yaw: 0, pitch: 0 };
+
+    // --- Brand visibility: shown when the pointer is near the centre, faded
+    // out beyond the threshold. Single knob — same boundary as the old "edge
+    // of devices" ring (15% of viewport height).
+    const brandEl = document.querySelector('.brand');
+    const brandRadiusFrac = 0.15;
+    let brandVisible = true;
+    function setBrandVisible(v) {
+      if (v === brandVisible) return;
+      brandVisible = v;
+      brandEl.classList.toggle('is-hidden', !v);
+    }
+
+    let pointerDistPx = 0;
+
+    window.addEventListener('pointermove', (e) => {
+      const nx = (e.clientX / window.innerWidth) * 2 - 1;
+      const ny = (e.clientY / window.innerHeight) * 2 - 1;
+      target.yaw = nx * yawRange * Math.PI;
+      target.pitch = -ny * pitchRange * Math.PI;
+
+      const dx = e.clientX - window.innerWidth / 2;
+      const dy = e.clientY - window.innerHeight / 2;
+      pointerDistPx = Math.hypot(dx, dy);
+    });
+
+    window.addEventListener('resize', () => {
+      const aspect = window.innerWidth / window.innerHeight;
+      camera.left   = -frustumSize * aspect / 2;
+      camera.right  =  frustumSize * aspect / 2;
+      camera.top    =  frustumSize / 2;
+      camera.bottom = -frustumSize / 2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
     function animate() {
       requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
 
-      shapes.forEach((group, index) => {
-        // Apply rotation multiplier here
-        const rotationX = mouseY * BASE_ROTATION_SPEED * ROTATION_MULTIPLIER;
-        const rotationY = mouseX * BASE_ROTATION_SPEED * ROTATION_MULTIPLIER;
+      current.yaw += (target.yaw - current.yaw) * cameraLag;
+      current.pitch += (target.pitch - current.pitch) * cameraLag;
 
-        group.rotation.x += rotationX;
-        group.rotation.y += rotationY;
-        
-        group.children.forEach((shape, i) => {
-          shape.rotation.x += rotationX * (i + 1);
-          shape.rotation.y += rotationY * (i + 1);
-        });
+      setBrandVisible(pointerDistPx < brandRadiusFrac * window.innerHeight);
+
+      camera.position.x = Math.sin(current.yaw) * Math.cos(current.pitch) * cameraRadius;
+      camera.position.y = Math.sin(current.pitch) * cameraRadius;
+      camera.position.z = Math.cos(current.yaw) * Math.cos(current.pitch) * cameraRadius;
+      camera.lookAt(0, 0, 0);
+
+      // Logo idle breathing
+      logoGroup.rotation.z = Math.sin(t * 0.3) * 0.03;
+
+      // Monoliths drift / bob
+      monoliths.forEach((m) => {
+        m.position.y = m.userData.baseY + Math.sin(t * m.userData.bobSpeed) * m.userData.bobAmp;
+        m.rotation.x += m.userData.rotSpeed;
+        m.rotation.y += m.userData.rotSpeed * 0.7;
       });
 
       renderer.render(scene, camera);
     }
     animate();
-
-    window.addEventListener('resize', () => {
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-    });
   </script>
 </body>
 </html>
