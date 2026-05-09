@@ -84,6 +84,34 @@
     .footer a { color: inherit; text-decoration: none; }
     .footer a:hover { opacity: 1; }
 
+    /* Items — DOM-overlay surfaces anchored to 3D directions on the sphere.
+       See _ideas/02_EDGE_PANELS_SPEC.md. Pass 0 = single placeholder. */
+    .item {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 320px;
+      height: 240px;
+      box-sizing: border-box;
+      padding: 22px 26px;
+      pointer-events: none;
+      z-index: 1;
+      background: rgba(7, 9, 12, 0.35);
+      border: 1px solid rgba(234, 244, 245, 0.10);
+      color: var(--rcd-light);
+      opacity: 0;
+      transform-origin: center center;
+      will-change: opacity, transform;
+    }
+    .item h2 {
+      margin: 0;
+      font-family: 'Lexend Peta', system-ui, sans-serif;
+      font-size: 0.78rem;
+      font-weight: 400;
+      letter-spacing: 0.22em;
+      color: var(--rcd-light);
+    }
+
   </style>
   <script type="importmap">
   {
@@ -107,9 +135,15 @@
     <a href="mailto:info@realitydevices.au">info@realitydevices.au</a>
   </div>
 
+  <div class="item" id="item-writing" aria-hidden="true">
+    <h2>Writing</h2>
+  </div>
+
   <script type="module">
     import * as THREE from 'three';
     import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+    import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+    import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
     // --- Tunables (see SPEC.md "Tuning knobs") ---
     const cameraRadius = 70;
@@ -125,6 +159,24 @@
     const backplateImage = './rcd.svg'; // null;   // null = solid white; or e.g. './backplate.png'
     const backplateColor = 0x999999;
     const backplateZ = -1001;      // just behind trim plane (-1000) to avoid z-fight
+
+    // --- Brand text: 3D extruded words, one per letter-layer.
+    // Each word lives at the exact z-span of its corresponding letter, so at
+    // the default centred view they read like flat 2D text — depth only
+    // reveals itself as the camera orbits (orthographic projection means
+    // points sharing xy at different z land on the same pixel head-on).
+    // World-unit positioning; size matched to feel like the old DOM .brand stack.
+    const brandTextEnabled = true;
+    const brandFontUrl = './lexend_peta.typeface.json';
+    const brandTextSize = 1.8;        // world units per glyph height
+    const brandLineSpacing = 1.7;     // multiple of brandTextSize
+    const brandTextX = -35;           // left-aligned column x (world units) — mirrors old DOM .brand at left:6vw
+    const brandTextDepthScale = 0.25; // fraction of the letter-layer thickness; thin slab centred on the layer
+    const brandWords = [
+      { word: 'Reality',      plane: 'r', color: '#FF8A30' },
+      { word: 'Construction', plane: 'c', color: '#00D4F0' },
+      { word: 'Devices',      plane: 'd', color: '#EAF4F5' },
+    ];
 
     // --- Component-based plane assignment ---
     // Each <path> in rcd.svg carries an id (p0..p14). We look up extrusion
@@ -521,9 +573,76 @@
       tempGroup.position.sub(scaledCenter);
 
       logoGroup.add(tempGroup);
+
+      // Hand the layer scale + centring offset to the brand-text builder so
+      // text meshes can land at exactly each letter's world z.
+      logoTransform = { s, offsetZ: -scaledCenter.z };
+      maybeBuildBrandText();
     }, undefined, (err) => {
       console.error('[proto] SVG load error:', err);
     });
+
+    // --- Brand text build (runs when both font & svg are ready) ---
+    let logoTransform = null;
+    let loadedFont = null;
+    if (brandTextEnabled) {
+      new FontLoader().load(brandFontUrl, (font) => {
+        loadedFont = font;
+        maybeBuildBrandText();
+      }, undefined, (err) => console.error('[proto] font load error:', err));
+    }
+    function maybeBuildBrandText() {
+      if (!brandTextEnabled || !logoTransform || !loadedFont) return;
+      buildBrandText(loadedFont, logoTransform.s, logoTransform.offsetZ);
+      // 3D text replaces the DOM brand stack — hide it to avoid double-vision.
+      const domBrand = document.querySelector('.brand');
+      if (domBrand) domBrand.style.display = 'none';
+    }
+    function buildBrandText(font, s, offsetZ) {
+      const lineStep = brandTextSize * brandLineSpacing;
+      // Stack centred vertically around y=0; first word sits highest.
+      const startY = ((brandWords.length - 1) / 2) * lineStep;
+      brandWords.forEach((spec, i) => {
+        const span = planes[spec.plane];
+        const worldBackZ  = span.back  * s + offsetZ;
+        const worldFrontZ = span.front * s + offsetZ;
+        const layerDepth = worldFrontZ - worldBackZ;
+        // Thinner slab, centred on the layer's mid-z so the word reads as
+        // "inhabiting" the same plane as its letter without copying its mass.
+        const depth = layerDepth * brandTextDepthScale;
+        const meshZ = worldBackZ + (layerDepth - depth) / 2;
+
+        const geom = new TextGeometry(spec.word, {
+          font,
+          size: brandTextSize,
+          height: depth,
+          curveSegments: 8,
+          bevelEnabled: true,
+          bevelThickness: 0.04,
+          bevelSize: 0.03,
+          bevelSegments: 2,
+        });
+        // Anchor origin at the glyph extents' bottom-left so the column
+        // left-aligns cleanly at brandTextX.
+        geom.computeBoundingBox();
+        const bb = geom.boundingBox;
+        geom.translate(-bb.min.x, -bb.min.y, 0);
+
+        const color = new THREE.Color(spec.color);
+        const mat = new THREE.MeshPhysicalMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.25,
+          metalness: 0.3,
+          roughness: 0.35,
+          clearcoat: 0.6,
+          clearcoatRoughness: 0.25,
+        });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(brandTextX, startY - i * lineStep, meshZ);
+        logoGroup.add(mesh);
+      });
+    }
 
     // --- Background: 3 particle shells ---
     function makeParticleShell(count, radius, color, size) {
@@ -591,6 +710,64 @@
       };
       scene.add(mesh);
       monoliths.push(mesh);
+    }
+
+    // --- Items (DOM overlay, anchored to a direction on the sphere) ---
+    // Spec: _ideas/02_EDGE_PANELS_SPEC.md. Pass 1 = decoupled placement model.
+    // Each item carries:
+    //   - anchorDir: unit direction on the sphere — drives reveal opacity
+    //     (angular distance between camera direction and anchorDir).
+    //   - worldPos: an independently-authored 3D point in scene space —
+    //     drives the on-screen projection (where the DOM card lives).
+    // The two are intentionally decoupled: previously worldPos was derived
+    // as anchorDir * depth, which forced the item to sit on the camera-to-
+    // origin ray at the anchor view and occlude the logo. Now we author
+    // worldPos beside the logo so the item appears next to the brand mark
+    // rather than over it.
+    function smoothstep(e0, e1, x) {
+      const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+      return t * t * (3 - 2 * t);
+    }
+    function anchorDirection(yaw, pitch) {
+      return new THREE.Vector3(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch),
+      );
+    }
+    const items = [
+      {
+        el: document.getElementById('item-writing'),
+        anchorDir: anchorDirection(0.4, 0.1),
+        worldPos: new THREE.Vector3(26, 6, 22),   // bisect of pass 1 (28,6,18) and pass 2 (22,5,30): card sits beside logo at anchor view, no right-edge bleed at front
+        fade: 0.6,
+      },
+    ];
+    const _camDir = new THREE.Vector3();
+    const _projected = new THREE.Vector3();
+    function updateItems() {
+      camera.getWorldPosition(_camDir).normalize();
+      for (const it of items) {
+        const dot = Math.max(-1, Math.min(1, _camDir.dot(it.anchorDir)));
+        const ang = Math.acos(dot);
+        const reveal = 1 - smoothstep(0, it.fade, ang);
+        _projected.copy(it.worldPos).project(camera);
+        const px = (_projected.x * 0.5 + 0.5) * window.innerWidth;
+        const py = (1 - (_projected.y * 0.5 + 0.5)) * window.innerHeight;
+        // Reveal drives scale as well as opacity: 0.6 at low reveal, 1.0 at
+        // full. Floor is deliberate — the card should still feel like a thing
+        // in space at low reveal, not vanish to a point. Composition order
+        // matters: translate to the projected pixel, then centre the card on
+        // that point with translate(-50%,-50%), then scale around the card's
+        // own centre (CSS applies right-to-left, but transform-origin: center
+        // makes the scale pivot consistent regardless).
+        const reveal_scale = 0.6 + 0.4 * reveal;
+        it.el.style.transform =
+          'translate(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px) ' +
+          'translate(-50%, -50%) ' +
+          'scale(' + reveal_scale.toFixed(3) + ')';
+        it.el.style.opacity = reveal.toFixed(3);
+      }
     }
 
     // --- Camera orbit (mouse-driven, lerped) ---
@@ -666,6 +843,8 @@
       camera.position.y = Math.sin(current.pitch) * cameraRadius;
       camera.position.z = Math.cos(current.yaw) * Math.cos(current.pitch) * cameraRadius;
       camera.lookAt(0, 0, 0);
+      camera.updateMatrixWorld();
+      updateItems();
 
       // Logo idle breathing
       logoGroup.rotation.z = Math.sin(t * 0.3) * 0.03;

@@ -1,0 +1,22 @@
+{
+  "pass": 0,
+  "slice": 0,
+  "kind": "content",
+  "scores": {
+    "recruiter": { "brand": 2,    "exploration": null, "weight": null, "audience": 2,    "cohesion": null },
+    "peer":      { "brand": 3,    "exploration": 4,    "weight": 2,    "audience": null, "cohesion": 2    },
+    "passerby":  { "brand": null, "exploration": 2,    "weight": null, "audience": 2,    "cohesion": null }
+  },
+  "axis_means": {
+    "brand": 2.0,
+    "exploration": 2.0,
+    "weight": 2.0,
+    "audience": 2.0,
+    "cohesion": 2.0
+  },
+  "overall": 2.0,
+  "invariants_failed": [],
+  "identity_drift": false,
+  "advance_to_next_slice": false,
+  "notes": "Non-firm scores (recruiter on weight/cohesion/exploration; peer on brand/exploration/audience; passerby on brand/weight/cohesion) recorded as null — see review_*.md for the full text."
+}

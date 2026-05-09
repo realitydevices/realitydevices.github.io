@@ -1,0 +1,15 @@
+{
+  "pass": 2,
+  "slice": 0,
+  "kind": "content",
+  "scores": {
+    "recruiter": { "brand": 3, "exploration": null, "weight": 3, "audience": 2, "cohesion": null },
+    "peer":      { "brand": 3, "exploration": 3, "weight": 3, "audience": null, "cohesion": 2 },
+    "passerby":  { "brand": null, "exploration": 4, "weight": 4, "audience": 3, "cohesion": null }
+  },
+  "axis_means":   { "brand": 3.0, "exploration": 4.0, "weight": 3.0, "audience": 2.5, "cohesion": 2.0 },
+  "overall": 2.9,
+  "invariants_failed": [],
+  "identity_drift": true,
+  "advance_to_next_slice": false
+}

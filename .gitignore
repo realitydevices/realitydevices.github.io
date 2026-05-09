@@ -3,3 +3,6 @@ _site
 .jekyll-cache
 .jekyll-metadata
 vendor
+node_modules
+_harness/font-build/node_modules
+_harness/font-build/package-lock.json

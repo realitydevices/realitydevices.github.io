@@ -1,0 +1,8 @@
+target: index.html
+captured: 2026-05-09T01:16:59Z
+viewport: 1440x900
+angles:
+  00_front      0.00  0.00
+  01_at-anchor  0.40  0.10
+  02_partial    0.20  0.05
+  03_far       -1.00  0.00
