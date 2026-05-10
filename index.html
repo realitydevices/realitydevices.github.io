@@ -124,20 +124,16 @@
 </head>
 <body>
   <canvas id="scene-canvas"></canvas>
-
-  <div class="brand" aria-hidden="true">
-    <span class="word is-active" data-word="reality">Reality</span>
-    <span class="word is-active" data-word="construction">Construction</span>
-    <span class="word is-active" data-word="devices">Devices</span>
-  </div>
-
   <div class="footer">
     <a href="mailto:info@realitydevices.au">info@realitydevices.au</a>
   </div>
 
   <div class="item" id="item-writing" aria-hidden="true">
+<!--
     <h2>Writing</h2>
+-->
   </div>
+
 
   <script type="module">
     import * as THREE from 'three';
@@ -171,7 +167,7 @@
     const brandTextSize = 1.8;        // world units per glyph height
     const brandLineSpacing = 1.7;     // multiple of brandTextSize
     const brandTextX = -35;           // left-aligned column x (world units) — mirrors old DOM .brand at left:6vw
-    const brandTextDepthScale = 0.25; // fraction of the letter-layer thickness; thin slab centred on the layer
+    const brandTextDepthScale = 0.1; // fraction of the letter-layer thickness; thin slab centred on the layer
     const brandWords = [
       { word: 'Reality',      plane: 'r', color: '#FF8A30' },
       { word: 'Construction', plane: 'c', color: '#00D4F0' },
@@ -739,7 +735,7 @@
       {
         el: document.getElementById('item-writing'),
         anchorDir: anchorDirection(0.4, 0.1),
-        worldPos: new THREE.Vector3(26, 6, 22),   // bisect of pass 1 (28,6,18) and pass 2 (22,5,30): card sits beside logo at anchor view, no right-edge bleed at front
+        worldPos: new THREE.Vector3(56, 6, 22),   // bisect of pass 1 (28,6,18) and pass 2 (22,5,30): card sits beside logo at anchor view, no right-edge bleed at front
         fade: 0.6,
       },
     ];
